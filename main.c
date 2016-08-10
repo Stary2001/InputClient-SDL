@@ -49,7 +49,7 @@ enum
 
 int16_t circle_x = 0;
 int16_t circle_y = 0;
-uint32_t hid_buttons = 0;
+uint32_t hid_buttons = 0xfffff000;
 
 int8_t touching = 0;
 int16_t touch_x = 0;
