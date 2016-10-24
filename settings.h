@@ -27,6 +27,7 @@ struct binding
 struct settings
 {
 	struct binding bindings[2][NUM_BUTTONS];
+	const char *ip;
 };
 
 int save_settings(const char *filename, struct settings *s);

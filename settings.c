@@ -40,6 +40,12 @@ int save_settings(const char *filename, struct settings *s)
 			break;
 		}
 	}
+
+	if(s->ip != NULL)
+	{
+		fprintf(f, "ip=%s\n", s->ip);
+	}
+
 	fclose(f);
 
 	return 0;
@@ -64,15 +70,15 @@ int load_settings(const char *filename, struct settings *s)
 
 	FILE *f = fopen(filename, "r");
 	if(f == NULL) { return 1; }
+
 	while(fgets(line_buff, 256, f))
 	{
 		char *k = strchr(line_buff, '=');
 		char *b = strchr(line_buff, '\n');
 		if(k == NULL) continue;
-		if(b == NULL) continue;
 		*k = 0;
 		k++;
-		*b = 0;
+		if(b != NULL) *b = 0;
 
 		char *name = line_buff;
 
@@ -115,6 +121,12 @@ int load_settings(const char *filename, struct settings *s)
 				s->bindings[1][key_index].axis.invert = *k++ == '+' ? 0 : 1;
 				s->bindings[1][key_index].axis.axis = atoi(k);
 			}
+		}
+		else if(strncmp(name, "ip", 2) == 0)
+		{
+			char *str = malloc(strlen(k) + 1);
+			strcpy(str, k);
+			s->ip = str;
 		}
 	}
 

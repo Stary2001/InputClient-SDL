@@ -33,7 +33,7 @@ int8_t touching = 0;
 int16_t touch_x = 0;
 int16_t touch_y = 0;
 
-int sock_fd = 0;
+int sock_fd = -1;
 struct sockaddr_in sock_addr;
 
 SDL_Surface *screen_surface;
@@ -69,6 +69,7 @@ int connect_to_3ds(const char *addr)
 
 void send_frame()
 {
+	if(sock_fd == -1) return;
 	char v[12];
 	uint32_t hid_state = ~hid_buttons;
 	uint32_t circle_state = 0x800800;
@@ -239,6 +240,13 @@ void update_screen()
 
 			draw_text(button_text, c, w, (i+2) * h, NULL, NULL);
 		}
+	}
+	else if(menus[curr_state].type == NET)
+	{
+		const char *s = settings.ip;
+		if(s == NULL) { s = "None"; }
+		draw_text("IP: ", font_color, 0, h, &w, NULL);
+		draw_text(s, font_color, w, h, NULL, NULL);
 	}
 	else if(menus[curr_state].type == INFO)
 	{
@@ -427,15 +435,11 @@ void process_menu(SDL_Event *ev, int i)
 
 int main(int argc, char ** argv)
 {
-	if(argc < 2)
+	int settings_fail = load_settings(settings_filename, &settings);
+	
+	if(settings.ip != NULL && !connect_to_3ds(settings.ip))
 	{
-		printf("usage: %s [ip]\n", argv[0]);
-		return 1;
-	}
-
-	if(!connect_to_3ds(argv[1]))
-	{
-		printf("failed to connect to '%s'!\n", argv[1]);
+		printf("failed to connect to '%s'!\n", settings.ip);
 		return 1;
 	}
 
@@ -462,7 +466,7 @@ int main(int argc, char ** argv)
 	TTF_Init();
 	font = TTF_OpenFont(font_path, 16);
 	
-	if(load_settings(settings_filename	, &settings))
+	if(settings_fail)
 	{
 		// init..
 		curr_state = 4;
