@@ -399,10 +399,10 @@ int main(int argc, char ** argv)
 			}
 		}
 
-		send_frame();
 
 		if(dirty)
 		{
+			send_frame();
 			SDL_Rect rekt;
 			rekt.x = 0;
 			rekt.y = 0;
