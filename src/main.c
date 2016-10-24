@@ -1,14 +1,25 @@
 #include <stdio.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_ttf.h>
+#include <string.h>
+#include <math.h>
+#include <SDL.h>
+#include <SDL_ttf.h>
 
 #include <sys/types.h>
-#include <sys/socket.h>
+#include <errno.h>
+
+#if defined(_WIN32) || defined(WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#define close closesocket
+#else
 #include <netdb.h>
+#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <errno.h>
 #include <unistd.h>
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -20,7 +31,7 @@
 #define JOY_DEADZONE 1000
 #define CPAD_BOUND 0x5d0
 
-const char *font_path = "/usr/share/fonts/TTF/DejaVuSans.ttf";
+const char *font_path = "DejaVuSans.ttf";
 TTF_Font *font;
 SDL_Renderer *sdlRenderer;
 
@@ -53,18 +64,31 @@ int connect_to_3ds(const char *addr)
 {
 	sock_fd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    struct hostent *server;
-    server = gethostbyname(addr);
-    if(server == NULL)
-    {
-    	return 0;
-    }
-    memset(&sock_addr, 0, sizeof(sock_addr));
-    sock_addr.sin_family = AF_INET;
-    memcpy(&sock_addr.sin_addr.s_addr, server->h_addr, server->h_length);
-    sock_addr.sin_port = htons(4950);
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
 
-    return 1;
+	memset(&sock_addr, 0, sizeof(sock_addr));
+	sock_addr.sin_family = AF_INET;
+	sock_addr.sin_port = htons(4950);
+
+	struct addrinfo *res;
+	int r = getaddrinfo(addr, "4950", &hints, &res);
+	if (r != 0)
+	{
+		close(sock_fd);
+		return 1;
+	}
+
+	struct addrinfo *s;
+	for (s = res; s != NULL; s = s->ai_next)
+	{
+		memcpy(&sock_addr, s->ai_addr, s->ai_addrlen);
+	}
+	freeaddrinfo(res);
+
+    return 0;
 }
 
 void send_frame()
@@ -146,13 +170,14 @@ void draw_text(const char *t, SDL_Color c, int x, int y, int *w, int *h)
 	SDL_Rect rekt1, rekt2;
 	SDL_Surface* text_surface = TTF_RenderText_Solid(font, t, c);
 	rekt1.x = 0;
-	rekt1.x = 0;
+	rekt1.y = 0;
 	rekt2.x = x;
 	rekt2.y = y;
 	rekt1.w = rekt2.w = text_surface->w;
 	rekt1.h = rekt2.h = text_surface->h;
 	SDL_BlitSurface(text_surface, &rekt1, screen_surface, &rekt2);
 	SDL_FreeSurface(text_surface);
+
 	if(w != NULL)
 	{
 		*w = rekt1.w;
@@ -266,7 +291,7 @@ void update_screen()
 	}
 }
 
-int process_input(SDL_Event *ev)
+void process_input(SDL_Event *ev)
 {
 	switch(ev->type)
 	{
@@ -433,20 +458,30 @@ void process_menu(SDL_Event *ev, int i)
 	}
 }
 
-int main(int argc, char ** argv)
+int main(int argc, char *argv[])
 {
-	int settings_fail = load_settings(settings_filename, &settings);
-	
-	if(settings.ip != NULL && !connect_to_3ds(settings.ip))
+#if defined(WIN32) || defined(_WIN32)
+	WSADATA wsaData;
+	int winsock_res = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (winsock_res != 0)
 	{
-		printf("failed to connect to '%s'!\n", settings.ip);
+		printf("winsock startup failed!\n");
 		return 1;
 	}
+#endif
 
-	for(int i = 0; i < NUM_BUTTONS; i++)
+	for (int i = 0; i < NUM_BUTTONS; i++)
 	{
 		settings.bindings[0][i].type = TYPE_NONE;
 		settings.bindings[1][i].type = TYPE_NONE;
+	}
+
+	int settings_fail = load_settings(settings_filename, &settings);
+	
+	if(settings.ip != NULL && connect_to_3ds(settings.ip))
+	{
+		printf("failed to connect to '%s'!\n", settings.ip);
+		return 1;
 	}
 
 	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
@@ -465,10 +500,14 @@ int main(int argc, char ** argv)
 	screen_surface = SDL_GetWindowSurface(win);
 	TTF_Init();
 	font = TTF_OpenFont(font_path, 16);
+	if(font == NULL)
+	{
+		printf("couldn't load font..\n");
+		return 1;
+	}
 	
 	if(settings_fail)
 	{
-		// init..
 		curr_state = 4;
 		update_screen();
 		SDL_UpdateWindowSurface(win);
@@ -552,8 +591,13 @@ int main(int argc, char ** argv)
 		SDL_JoystickClose(joy);
 	}
 
+die:
 	TTF_Quit();
 	SDL_DestroyRenderer(sdlRenderer);
 	SDL_DestroyWindow(win);
 	SDL_Quit();
+#if defined(WIN32) || defined(_WIN32)
+	WSACleanup();
+#endif
+	return 0;
 }

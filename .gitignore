@@ -1,3 +1,12 @@
 input
 *.o
 input.conf
+x86
+x64
+Debug
+Release
+Client.sdf
+Client.opensdf
+Client.vcxproj.filters
+Client.vcxproj.user
+Client.v12.suo

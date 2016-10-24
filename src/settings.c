@@ -1,12 +1,12 @@
 #include <stdio.h>
-#include <SDL2/SDL.h>
+#include <string.h>
+#include <stdlib.h>
+#include <SDL.h>
 #include "input.h"
 #include "settings.h"
 
 int save_settings(const char *filename, struct settings *s)
-{
-	char line_buff[256];
-	
+{	
 	FILE *f = fopen(filename, "w");
 	if(f == NULL) { return 1; }
 
@@ -74,7 +74,9 @@ int load_settings(const char *filename, struct settings *s)
 	while(fgets(line_buff, 256, f))
 	{
 		char *k = strchr(line_buff, '=');
-		char *b = strchr(line_buff, '\n');
+		char *b = strchr(line_buff, '\r');
+		if (b == NULL) b = strchr(line_buff, '\n'); // this accounts for \r\n line endings (windows style)
+
 		if(k == NULL) continue;
 		*k = 0;
 		k++;
