@@ -2,9 +2,17 @@
 
 enum binding_type
 {
-	KEY,
-	BUTTON,
-	HAT,
+	TYPE_NONE,
+	TYPE_KEY,
+	TYPE_BUTTON,
+	TYPE_HAT,
+	TYPE_AXIS
+};
+
+struct axis
+{
+	int axis;
+	int invert;
 };
 
 struct binding
@@ -13,19 +21,12 @@ struct binding
 	int key;
 	int button;
 	int hat;
-};
-
-struct axis
-{
-	int x_invert;
-	int y_invert;
+	struct axis axis;
 };
 
 struct settings
 {
 	struct binding bindings[2][NUM_BUTTONS];
-	struct axis cpad_axes[2];
-	struct axis cstick_axes[2];
 };
 
 int save_settings(const char *filename, struct settings *s);

@@ -7,4 +7,4 @@ input: $(OBJS) $(HEADERS)
 	gcc $(OBJS) -lSDL2 -lSDL2_ttf -o input -g
 
 %.o: %.c
-	gcc -c $< -o $@
+	gcc -c $< -o $@ -g

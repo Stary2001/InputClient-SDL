@@ -3,7 +3,8 @@ enum menu_type
 	NONE,
 	INPUT_KB,
 	INPUT_CONTROLLER,
-	NET
+	NET,
+	INFO
 };
 
 struct menu
@@ -18,4 +19,5 @@ struct menu menus[] = {
 	{INPUT_KB, "Bindings - Keyboard"},
 	{INPUT_CONTROLLER, "Bindings - Controller"},
 	{NET, "Net Settings"},
+	{INFO, "Getting Started"}
 };

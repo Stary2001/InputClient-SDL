@@ -99,15 +99,42 @@ void send_frame()
     int i = sendto(sock_fd, v, 12, 0, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in));
 }
 
-void set(uint32_t a, uint32_t b)
+void set(uint32_t a, int32_t b)
 {
-	if(b)
+	switch(a)
 	{
-		hid_buttons |= a;
-	}
-	else
-	{
-		hid_buttons &= ~a;
+		case KEY_CPAD_UP:
+			if(b==0 || b==1) { circle_y = 32767 * b; }
+			else { circle_y = b; }
+		break;
+
+		case KEY_CPAD_DOWN:
+			if(b==0 || b==1) { circle_y = -32768 * b; }
+			else { circle_y = b; }
+		break;
+
+		case KEY_CPAD_LEFT:
+			if(b==0 || b==1) { circle_x = -32768 * b; }
+			else { circle_y = b; }
+		break;
+
+		case KEY_CPAD_RIGHT:
+			if(b==0 || b==1) { circle_x = 32767 * b; }
+			else { circle_y = b; }
+		break;
+
+		default:
+		{
+			if(b)
+			{
+				hid_buttons |= a;
+			}
+			else
+			{
+				hid_buttons &= ~a;
+			}
+		}
+		break;
 	}
 }
 
@@ -139,7 +166,14 @@ void update_screen()
 {
 	SDL_Color font_color = {255, 255, 255, 0};
 	SDL_Color highlight_color = {255, 0, 0, 0};
-	
+	if(capture)
+	{
+		highlight_color.r = 255;
+		highlight_color.g = 255;
+		highlight_color.b = 0;
+		highlight_color.a = 0;
+	}
+
 	int h;
 	int w;
 
@@ -159,32 +193,67 @@ void update_screen()
 			strcat(name, " - ");
 			draw_text(name, c, 0, (i+2) * h, &w, NULL);
 
-			char buff[32];
+			int bind_index = menus[curr_state].type == INPUT_KB ? 0 : 1;
 			const char *button_text;
-			if(menus[curr_state].type == INPUT_KB)
+			char buff[32];
+
+			if(settings.bindings[bind_index][i].type == TYPE_NONE)
 			{
-				button_text = SDL_GetKeyName(settings.bindings[0][i].key);
+				button_text = "None";
+			}
+			else if(settings.bindings[bind_index][i].type == TYPE_KEY)
+			{
+				button_text = SDL_GetKeyName(settings.bindings[bind_index][i].key);
 			}
 			else
 			{
 				const char *prefix = NULL;
-				switch(settings.bindings[1][i].type)
+				const char *prefix_2 = "";
+				int *p = NULL;
+
+				switch(settings.bindings[bind_index][i].type)
 				{
-					case BUTTON:
+					case TYPE_BUTTON:
 						prefix = "Button ";
+						p = &settings.bindings[bind_index][i].button;
 					break;
-					case HAT:
+
+					case TYPE_HAT:
 						prefix = "Hat ";
+						p = &settings.bindings[bind_index][i].hat;
+					break;
+
+					case TYPE_AXIS:
+						prefix = "Axis ";
+						prefix_2 = settings.bindings[bind_index][i].axis.invert ? "-" : "+";
+						p = &settings.bindings[bind_index][i].axis.axis;
 					break;
 				}
-				if(prefix != NULL)
+
+				if(prefix != NULL && p != NULL)
 				{
-					sprintf(buff, "%s %i", prefix, settings.bindings[1][i].key);
+					sprintf(buff, "%s %s%i", prefix, prefix_2, *p);
 				}
 				button_text = buff;
 			}
 
-			draw_text(SDL_GetKeyName(settings.bindings[0][i].key), c, w, (i+2) * h, NULL, NULL);
+			draw_text(button_text, c, w, (i+2) * h, NULL, NULL);
+		}
+	}
+	else if(menus[curr_state].type == INFO)
+	{
+		int num_lines = 5;
+		const char *info_text[] = {"Keybindings: ",
+								"F1 = Bindings (Keyboard)",
+								"F2 = Bindings (Controller)",
+								"F3 = Network Settings",
+								"Esc = Back (or quit)"};
+		int y = h;
+
+		for(int i = 0; i < num_lines; i++)
+		{
+			draw_text(info_text[i], font_color, 0, y, NULL, &h);
+			y += h;
 		}
 	}
 }
@@ -193,33 +262,31 @@ int process_input(SDL_Event *ev)
 {
 	switch(ev->type)
 	{
-		case SDL_QUIT:
-			run = 0;
-		break;
-
 		case SDL_JOYAXISMOTION:
 		{
+			uint8_t b = ev->jaxis.axis;
 			int16_t v = ev->jaxis.value;
 			if(abs(v) < JOY_DEADZONE)
 			{
 				v = 0;
 			}
 
-			if(ev->jaxis.axis == 0)
+			if(v == -32768)
 			{
-				circle_x = v;
+				v++;
 			}
-			else if(ev->jaxis.axis == 1)
+
+			for(int i = 0; i < NUM_BUTTONS; i++)
 			{
-				if(v == -32768)
+				struct binding *b = &settings.bindings[1][i];
+				if(b->type == TYPE_AXIS && b->axis.axis == ev->jaxis.axis)
 				{
-					v++; // -32768 when negated is......itself?
+					if(b->axis.invert)
+					{
+						v = -v;
+					}
+					set(b->key, ev->type == SDL_JOYBUTTONDOWN);
 				}
-				circle_y = -v; // Y is inverted.
-			}
-			else
-			{
-				printf("unk axis %i val %i\n", ev->jaxis.axis, ev->jaxis.value);
 			}
 		}
 		break;
@@ -231,7 +298,7 @@ int process_input(SDL_Event *ev)
 			for(int i = 0; i < NUM_BUTTONS; i++)
 			{
 				struct binding *b = &settings.bindings[1][i];
-				if(b->type == BUTTON && b->button == ev->jbutton.button)
+				if(b->type == TYPE_BUTTON && b->button == ev->jbutton.button)
 				{
 					set(b->key, ev->type == SDL_JOYBUTTONDOWN);
 				}
@@ -244,7 +311,7 @@ int process_input(SDL_Event *ev)
 			uint8_t v = ev->jhat.value;
 			for(int i = 0; i < NUM_BUTTONS; i++)
 			{
-				if(settings.bindings[1][i].type == HAT)
+				if(settings.bindings[1][i].type == TYPE_HAT)
 				{
 					set(settings.bindings[1][i].key, v & settings.bindings[1][i].hat);
 				}
@@ -282,35 +349,78 @@ int process_input(SDL_Event *ev)
 	}
 }
 
-void process_menu(SDL_Event *ev)
+void set_binding(int i, int item, int type, int val, int inv)
 {
-	switch(ev->type)
+	settings.bindings[i][item].type = type;
+	switch(type)
 	{
-		case SDL_KEYDOWN:
-		if(capture)
+		case TYPE_KEY:
+			settings.bindings[i][curr_item].key = val;
+		break;
+		case TYPE_BUTTON:
+			settings.bindings[i][curr_item].button = val;
+		break;
+		case TYPE_HAT:
+			settings.bindings[i][curr_item].hat = val;
+		break;
+		case TYPE_AXIS:
+			settings.bindings[i][curr_item].axis.axis = val;
+			settings.bindings[i][curr_item].axis.invert = inv;
+		break;
+	}
+
+	capture = 0;
+	save_settings(settings_filename, &settings);
+}
+
+void process_menu(SDL_Event *ev, int i)
+{
+	if(ev->type == SDL_KEYDOWN)
+	{
+		if(capture && i == 0) // Keyboard only.
 		{
-			settings.bindings[0][curr_item].key = ev->key.keysym.sym;
-			capture = 0;
-
-			save_settings(settings_filename, &settings);
-
-			break;
+			set_binding(i, curr_item, TYPE_KEY, ev->key.keysym.sym, 0);
 		}
-
-		switch(ev->key.keysym.sym)
+		else
 		{
-			case SDLK_UP:
-				if(curr_item != 0) curr_item--;
-			break;
+			switch(ev->key.keysym.sym)
+			{
+				case SDLK_UP:
+					if(curr_item != 0) curr_item--;
+				break;
 
-			case SDLK_DOWN:
-				if(curr_item != num_items-1) curr_item++;
-			break;
+				case SDLK_DOWN:
+					if(curr_item != num_items-1) curr_item++;
+				break;
 
-			case SDLK_RETURN:
-				capture = 1;
-				settings.bindings[0][curr_item].key = SDLK_UNKNOWN;
-			break;
+				case SDLK_RETURN:
+					capture = 1;
+					settings.bindings[i][curr_item].type = TYPE_NONE;
+				break;
+			}
+		}
+	}
+	else if(i == 1)
+	{
+		if(ev->type == SDL_JOYBUTTONDOWN && capture)
+		{
+			set_binding(i, curr_item, TYPE_BUTTON, ev->jbutton.button, 0);
+		}
+		else if(ev->type == SDL_JOYAXISMOTION && capture)
+		{
+			uint8_t b = ev->jaxis.axis;
+			int16_t v = ev->jaxis.value;
+			if(abs(v) < JOY_DEADZONE * 4)
+			{
+				return;
+			}
+
+			set_binding(i, curr_item, TYPE_AXIS, ev->jaxis.axis, v < 0);
+
+		}
+		else if(ev->type == SDL_JOYHATMOTION && capture)
+		{
+			set_binding(i, curr_item, TYPE_HAT, ev->jhat.hat, 0);
 		}
 	}
 }
@@ -329,13 +439,22 @@ int main(int argc, char ** argv)
 		return 1;
 	}
 
-	if(!load_settings(settings_filename	, &settings))
+	for(int i = 0; i < NUM_BUTTONS; i++)
 	{
-		// first time setup blahblah
+		settings.bindings[0][i].type = TYPE_NONE;
+		settings.bindings[1][i].type = TYPE_NONE;
 	}
 
 	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
 	printf("%i joysticks detected..\n", SDL_NumJoysticks());
+	SDL_Joystick *joy = NULL;
+
+	if(SDL_NumJoysticks() > 0)
+	{
+		joy = SDL_JoystickOpen(0);
+		printf("opened joystick %x\n", joy);
+	}
+
 	SDL_JoystickEventState(SDL_ENABLE);
 
 	SDL_Window *win = SDL_CreateWindow("sdl thing", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, window_w, window_h, 0);
@@ -343,6 +462,14 @@ int main(int argc, char ** argv)
 	TTF_Init();
 	font = TTF_OpenFont(font_path, 16);
 	
+	if(load_settings(settings_filename	, &settings))
+	{
+		// init..
+		curr_state = 4;
+		update_screen();
+		SDL_UpdateWindowSurface(win);
+	}
+
 	int i = 0;
 	int dirty = 0;
 	SDL_Color bg = {0, 0, 0, 0};
@@ -380,7 +507,7 @@ int main(int argc, char ** argv)
 					curr_state = 3;
 				}
 			}
-			else if(ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_CLOSE)
+			else if(ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_CLOSE || ev.type == SDL_QUIT)
 			{
 				run = 0;
 				break;
@@ -394,11 +521,11 @@ int main(int argc, char ** argv)
 				break;
 
 				case 1:
-					process_menu(&ev);
+				case 2:
+					process_menu(&ev, curr_state-1);
 				break;
 			}
 		}
-
 
 		if(dirty)
 		{
@@ -414,6 +541,11 @@ int main(int argc, char ** argv)
 
 			dirty = 0;
 		}
+	}
+
+	if(joy != NULL)
+	{
+		SDL_JoystickClose(joy);
 	}
 
 	TTF_Quit();

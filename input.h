@@ -33,7 +33,7 @@ enum
 	KEY_RIGHT = KEY_DRIGHT | KEY_CPAD_RIGHT, ///< D-Pad Right or Circle Pad Right
 };
 
-#define NUM_BUTTONS 12
+#define NUM_BUTTONS 16
 
 struct button
 {

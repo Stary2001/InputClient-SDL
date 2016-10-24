@@ -12,7 +12,13 @@ int save_settings(const char *filename, struct settings *s)
 
 	for(int i = 0; i < NUM_BUTTONS; i++)
 	{
-		fprintf(f, "kb%s=%s\n", buttons[i].name, SDL_GetKeyName(s->bindings[0][i].key));
+		const char *c = SDL_GetKeyName(s->bindings[0][i].key);
+		if(c == NULL || strlen(c) == 0)
+		{
+			c = "none";
+		}
+
+		fprintf(f, "kb%s=%s\n", buttons[i].name, c);
 	}
 
 	for(int i = 0; i < NUM_BUTTONS; i++)
@@ -20,11 +26,14 @@ int save_settings(const char *filename, struct settings *s)
 		fprintf(f, "pad%s=", buttons[i].name);
 		switch(s->bindings[1][i].type)
 		{
-			case BUTTON:
+			case TYPE_BUTTON:
 				fprintf(f, "button%i\n", s->bindings[1][i].button);
 			break;
-			case HAT:
+			case TYPE_HAT:
 				fprintf(f, "hat%i\n", s->bindings[1][i].hat);
+			break;
+			case TYPE_AXIS:
+				fprintf(f, "axis%s%i\n", s->bindings[1][i].axis.invert ? "-" : "+", s->bindings[1][i].axis.axis);
 			break;
 			default:
 				fprintf(f, "none\n");
@@ -54,6 +63,7 @@ int load_settings(const char *filename, struct settings *s)
 	char line_buff[256];
 
 	FILE *f = fopen(filename, "r");
+	if(f == NULL) { return 1; }
 	while(fgets(line_buff, 256, f))
 	{
 		char *k = strchr(line_buff, '=');
@@ -73,8 +83,12 @@ int load_settings(const char *filename, struct settings *s)
 			key_index = find_key(name);
 			if(key_index == -1) continue;
 
-			s->bindings[0][key_index].type = KEY;
+			s->bindings[0][key_index].type = TYPE_KEY;
 			s->bindings[0][key_index].key = SDL_GetKeyFromName(k);
+			if(s->bindings[0][key_index].key == SDLK_UNKNOWN)
+			{
+				s->bindings[0][key_index].type = TYPE_NONE;
+			}
 		}
 		else if(strncmp(name, "pad", 3) == 0)
 		{
@@ -85,19 +99,26 @@ int load_settings(const char *filename, struct settings *s)
 			if(strncmp(k, "button", 6) == 0)
 			{
 				k += 6;
-				s->bindings[1][key_index].type = BUTTON;
+				s->bindings[1][key_index].type = TYPE_BUTTON;
 				s->bindings[1][key_index].button = atoi(k);
 			}
 			else if(strncmp(k, "hat", 3) == 0)
 			{
 				k += 3;
-				s->bindings[1][key_index].type = HAT;
+				s->bindings[1][key_index].type = TYPE_HAT;
 				s->bindings[1][key_index].hat = atoi(k);
+			}
+			else if(strncmp(k, "axis", 4) == 0)
+			{
+				k += 4;
+				s->bindings[1][key_index].type = TYPE_AXIS;
+				s->bindings[1][key_index].axis.invert = *k++ == '+' ? 0 : 1;
+				s->bindings[1][key_index].axis.axis = atoi(k);
 			}
 		}
 	}
 
 	fclose(f);
 
-	return 1;
+	return 0;
 }

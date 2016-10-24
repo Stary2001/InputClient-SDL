@@ -1,5 +1,6 @@
 #include "input.h"
 
+#define AXIS -1
 struct button buttons[NUM_BUTTONS] =
 {
 	{"A", KEY_A},
@@ -13,5 +14,10 @@ struct button buttons[NUM_BUTTONS] =
 	{"L", KEY_L},
 	{"R", KEY_R},
 	{"Start", KEY_START},
-	{"Select", KEY_SELECT}
+	{"Select", KEY_SELECT},
+	{"CPadUp", KEY_CPAD_UP},
+	{"CPadDown", KEY_CPAD_DOWN},
+	{"CPadLeft", KEY_CPAD_LEFT},
+	{"CPadRight", KEY_CPAD_RIGHT},
 };
+#undef AXIS
