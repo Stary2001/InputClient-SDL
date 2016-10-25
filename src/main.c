@@ -28,7 +28,7 @@
 #include "menu.h"
 #include "settings.h"
 
-#define JOY_DEADZONE 1000
+#define JOY_DEADZONE 1700
 #define CPAD_BOUND 0x5d0
 
 const char *font_path = "DejaVuSans.ttf";
@@ -134,18 +134,18 @@ void set(uint32_t a, int32_t b)
 		break;
 
 		case KEY_CPAD_DOWN:
-			if(b==0 || b==1) { circle_y = -32768 * b; }
-			else { circle_y = b; }
+			if(b==0 || b==1) { circle_y = -32767 * b; }
+			else { circle_y = -b; }
 		break;
 
 		case KEY_CPAD_LEFT:
-			if(b==0 || b==1) { circle_x = -32768 * b; }
-			else { circle_y = b; }
+			if(b==0 || b==1) { circle_x = -32767 * b; }
+			else { circle_x = -b; }
 		break;
 
 		case KEY_CPAD_RIGHT:
 			if(b==0 || b==1) { circle_x = 32767 * b; }
-			else { circle_y = b; }
+			else { circle_x = b; }
 		break;
 
 		default:
@@ -314,11 +314,10 @@ void process_input(SDL_Event *ev)
 				struct binding *b = &settings.bindings[1][i];
 				if(b->type == TYPE_AXIS && b->axis.axis == ev->jaxis.axis)
 				{
-					if(b->axis.invert)
+					if (b->axis.invert == (v < 0))
 					{
-						v = -v;
+						set(buttons[i].key, abs(v));
 					}
-					set(b->key, ev->type == SDL_JOYBUTTONDOWN);
 				}
 			}
 		}
@@ -333,7 +332,7 @@ void process_input(SDL_Event *ev)
 				struct binding *b = &settings.bindings[1][i];
 				if(b->type == TYPE_BUTTON && b->button == ev->jbutton.button)
 				{
-					set(b->key, ev->type == SDL_JOYBUTTONDOWN);
+					set(buttons[i].key, ev->type == SDL_JOYBUTTONDOWN);
 				}
 			}
 		}
@@ -346,7 +345,7 @@ void process_input(SDL_Event *ev)
 			{
 				if(settings.bindings[1][i].type == TYPE_HAT)
 				{
-					set(settings.bindings[1][i].key, v & settings.bindings[1][i].hat);
+					set(buttons[i].key, v & settings.bindings[1][i].hat);
 				}
 			}
 		}
@@ -453,7 +452,7 @@ void process_menu(SDL_Event *ev, int i)
 		}
 		else if(ev->type == SDL_JOYHATMOTION && capture)
 		{
-			set_binding(i, curr_item, TYPE_HAT, ev->jhat.hat, 0);
+			set_binding(i, curr_item, TYPE_HAT, ev->jhat.value, 0);
 		}
 	}
 }
