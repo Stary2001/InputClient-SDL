@@ -1,10 +1,20 @@
-# wat
+# InputRedirection-SDL
 PC-side input using SDL for [this thing](https://github.com/Stary2001/InputRedirection).
-# how2
+
+## Usage
 ```
 make
 ./input [ip address]
 ```
-# todo
-* joystick not heavily tested
-* windows build
+
+### macOS Specific Steps
+
+To compile under macOS please install the following through [brew](http://brew.sh/). Then use make to build.
+```
+brew install sdl2
+brew install sdl2_ttf
+```
+
+## Todo
+* Joystick not heavily tested
+* Windows build
