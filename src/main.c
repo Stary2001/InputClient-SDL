@@ -122,11 +122,11 @@ void send_frame()
 		touch_state = x | (y << 12) | (0x01 << 24);
 	}
 
-		memcpy(v, &hid_state, 4);
-		memcpy(v + 8, &circle_state, 4);
-		memcpy(v + 4, &touch_state, 4);
+	memcpy(v, &hid_state, 4);
+	memcpy(v + 8, &circle_state, 4);
+	memcpy(v + 4, &touch_state, 4);
 
-		int i = sendto(sock_fd, v, 12, 0, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in));
+	int i = sendto(sock_fd, v, 12, 0, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in));
 }
 
 /**
