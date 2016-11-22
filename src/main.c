@@ -31,6 +31,11 @@
 #define JOY_DEADZONE 1700
 #define CPAD_BOUND 0x5d0
 
+#define ACCEPTING_INPUT 0
+#define MENU_KEYBOARD 1
+#define MENU_JOYPAD 2
+#define MENU_IP 3
+
 const char *font_path = "DejaVuSans.ttf";
 TTF_Font *font;
 SDL_Renderer *sdlRenderer;
@@ -88,7 +93,7 @@ int connect_to_3ds(const char *addr)
 	}
 	freeaddrinfo(res);
 
-    return 0;
+	return 0;
 }
 
 void send_frame()
@@ -117,46 +122,49 @@ void send_frame()
 		touch_state = x | (y << 12) | (0x01 << 24);
 	}
 
-    memcpy(v, &hid_state, 4);
-    memcpy(v + 8, &circle_state, 4);
-    memcpy(v + 4, &touch_state, 4);
+		memcpy(v, &hid_state, 4);
+		memcpy(v + 8, &circle_state, 4);
+		memcpy(v + 4, &touch_state, 4);
 
-    int i = sendto(sock_fd, v, 12, 0, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in));
+		int i = sendto(sock_fd, v, 12, 0, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in));
 }
 
-void set(uint32_t a, int32_t b)
+/**
+ * Manipulate CircleY, CircleX and HID Buttons according to supplied input
+ */
+void set(uint32_t button, int32_t value)
 {
-	switch(a)
+	switch(button)
 	{
 		case KEY_CPAD_UP:
-			if(b==0 || b==1) { circle_y = 32767 * b; }
-			else { circle_y = b; }
+			if(value == 0 || value == 1) { circle_y = 32767 * value; }
+			else { circle_y = value; }
 		break;
 
 		case KEY_CPAD_DOWN:
-			if(b==0 || b==1) { circle_y = -32767 * b; }
-			else { circle_y = -b; }
+			if(value == 0 || value == 1) { circle_y = -32767 * value; }
+			else { circle_y = -value; }
 		break;
 
 		case KEY_CPAD_LEFT:
-			if(b==0 || b==1) { circle_x = -32767 * b; }
-			else { circle_x = -b; }
+			if(value == 0 || value == 1) { circle_x = -32767 * value; }
+			else { circle_x = -value; }
 		break;
 
 		case KEY_CPAD_RIGHT:
-			if(b==0 || b==1) { circle_x = 32767 * b; }
-			else { circle_x = b; }
+			if(value == 0 || value == 1) { circle_x = 32767 * value; }
+			else { circle_x = value; }
 		break;
 
 		default:
 		{
-			if(b)
+			if(value)
 			{
-				hid_buttons |= a;
+				hid_buttons |= button;
 			}
 			else
 			{
-				hid_buttons &= ~a;
+				hid_buttons &= ~button;
 			}
 		}
 		break;
@@ -167,24 +175,24 @@ void draw_text(const char *t, SDL_Color c, int x, int y, int *w, int *h)
 {
 	if(strlen(t) == 0) return;
 
-	SDL_Rect rekt1, rekt2;
+	SDL_Rect rect1, rect2;
 	SDL_Surface* text_surface = TTF_RenderText_Solid(font, t, c);
-	rekt1.x = 0;
-	rekt1.y = 0;
-	rekt2.x = x;
-	rekt2.y = y;
-	rekt1.w = rekt2.w = text_surface->w;
-	rekt1.h = rekt2.h = text_surface->h;
-	SDL_BlitSurface(text_surface, &rekt1, screen_surface, &rekt2);
+	rect1.x = 0;
+	rect1.y = 0;
+	rect2.x = x;
+	rect2.y = y;
+	rect1.w = rect2.w = text_surface->w;
+	rect1.h = rect2.h = text_surface->h;
+	SDL_BlitSurface(text_surface, &rect1, screen_surface, &rect2);
 	SDL_FreeSurface(text_surface);
 
 	if(w != NULL)
 	{
-		*w = rekt1.w;
+		*w = rect1.w;
 	}
 	if(h != NULL)
 	{
-		*h = rekt1.h;
+		*h = rect1.h;
 	}
 }
 
@@ -291,6 +299,11 @@ void update_screen()
 	}
 }
 
+/**
+ * Process event and set the variables for sending information to the 3DS.
+ *
+ * @arg SDL_Event *ev
+ */
 void process_input(SDL_Event *ev)
 {
 	switch(ev->type)
@@ -405,13 +418,16 @@ void set_binding(int i, int item, int type, int val, int inv)
 	save_settings(settings_filename, &settings);
 }
 
-void process_menu(SDL_Event *ev, int i)
+/**
+ * Handles menu inputs and starting capture
+ */
+void process_menu(SDL_Event *ev, int curr_menu)
 {
 	if(ev->type == SDL_KEYDOWN)
 	{
-		if(capture && i == 0) // Keyboard only.
+		if(capture && curr_menu == 0) // Keyboard only.
 		{
-			set_binding(i, curr_item, TYPE_KEY, ev->key.keysym.sym, 0);
+			set_binding(curr_menu, curr_item, TYPE_KEY, ev->key.keysym.sym, 0);
 		}
 		else
 		{
@@ -427,16 +443,16 @@ void process_menu(SDL_Event *ev, int i)
 
 				case SDLK_RETURN:
 					capture = 1;
-					settings.bindings[i][curr_item].type = TYPE_NONE;
+					settings.bindings[curr_menu][curr_item].type = TYPE_NONE;
 				break;
 			}
 		}
 	}
-	else if(i == 1)
+	else if(curr_menu == 1)
 	{
 		if(ev->type == SDL_JOYBUTTONDOWN && capture)
 		{
-			set_binding(i, curr_item, TYPE_BUTTON, ev->jbutton.button, 0);
+			set_binding(curr_menu, curr_item, TYPE_BUTTON, ev->jbutton.button, 0);
 		}
 		else if(ev->type == SDL_JOYAXISMOTION && capture)
 		{
@@ -447,12 +463,12 @@ void process_menu(SDL_Event *ev, int i)
 				return;
 			}
 
-			set_binding(i, curr_item, TYPE_AXIS, ev->jaxis.axis, v < 0);
+			set_binding(curr_menu, curr_item, TYPE_AXIS, ev->jaxis.axis, v < 0);
 
 		}
 		else if(ev->type == SDL_JOYHATMOTION && capture)
 		{
-			set_binding(i, curr_item, TYPE_HAT, ev->jhat.value, 0);
+			set_binding(curr_menu, curr_item, TYPE_HAT, ev->jhat.value, 0);
 		}
 	}
 }
@@ -476,43 +492,46 @@ int main(int argc, char *argv[])
 	}
 
 	int settings_fail = load_settings(settings_filename, &settings);
-	
+
+	printf("Settings IP: %s \n", settings.ip);
+
 	if(settings.ip != NULL && connect_to_3ds(settings.ip))
 	{
-		printf("failed to connect to '%s'!\n", settings.ip);
+		printf("Failed to connect to '%s'!\n", settings.ip);
 		return 1;
 	}
 
 	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
-	printf("%i joysticks detected..\n", SDL_NumJoysticks());
+	printf("Detected %i joysticks. \n", SDL_NumJoysticks());
 	SDL_Joystick *joy = NULL;
 
 	if(SDL_NumJoysticks() > 0)
 	{
 		joy = SDL_JoystickOpen(0);
-		printf("opened joystick %x\n", joy);
+		printf("Opened joystick 0: %x\n", joy);
 	}
 
 	SDL_JoystickEventState(SDL_ENABLE);
 
-	SDL_Window *win = SDL_CreateWindow("sdl thing", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, window_w, window_h, 0);
+	SDL_Window *win = SDL_CreateWindow("InputRedirectSDL", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, window_w, window_h, 0);
 	screen_surface = SDL_GetWindowSurface(win);
 	TTF_Init();
 	font = TTF_OpenFont(font_path, 16);
+
 	if(font == NULL)
 	{
-		printf("couldn't load font..\n");
+		printf("Could not load font. Ensure %s is in the same directory as the executable. \n", font_path);
 		return 1;
 	}
-	
+
 	if(settings_fail)
 	{
-		curr_state = 4;
+		printf("Settings failed to load, moving user to IP screen.");
+		curr_state = MENU_IP;
 		update_screen();
 		SDL_UpdateWindowSurface(win);
 	}
 
-	int i = 0;
 	int dirty = 0;
 	SDL_Color bg = {0, 0, 0, 0};
 
@@ -526,58 +545,59 @@ int main(int argc, char *argv[])
 			{
 				if(ev.key.keysym.sym == SDLK_ESCAPE)
 				{
-					if(curr_state == 0)
+					if(curr_state == ACCEPTING_INPUT)
 					{
 						run = 0;
 						break;
 					}
 					else
 					{
-						curr_state = 0;
+						curr_state = ACCEPTING_INPUT;
 					}
 				}
 				else if(ev.key.keysym.sym == SDLK_F1)
 				{
-					curr_state = 1;
+					curr_state = MENU_KEYBOARD;
 				}
 				else if(ev.key.keysym.sym == SDLK_F2)
 				{
-					curr_state = 2;
+					curr_state = MENU_JOYPAD;
 				}
 				else if(ev.key.keysym.sym == SDLK_F3)
 				{
-					curr_state = 3;
+					curr_state = MENU_IP;
 				}
 			}
-			else if(ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_CLOSE || ev.type == SDL_QUIT)
+			else if((ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_CLOSE) || ev.type == SDL_QUIT)
 			{
 				run = 0;
 				break;
 			}
 
 			dirty = 1;
+
 			switch(curr_state)
 			{
 				case 0:
 					process_input(&ev);
-				break;
+					break;
 
 				case 1:
 				case 2:
 					process_menu(&ev, curr_state-1);
-				break;
+					break;
 			}
 		}
 
 		if(dirty)
 		{
 			send_frame();
-			SDL_Rect rekt;
-			rekt.x = 0;
-			rekt.y = 0;
-			rekt.w = window_w;
-			rekt.h = window_h;
-			SDL_FillRect(screen_surface, &rekt, SDL_MapRGB(screen_surface->format, bg.r, bg.g, bg.b));
+			SDL_Rect rect;
+			rect.x = 0;
+			rect.y = 0;
+			rect.w = window_w;
+			rect.h = window_h;
+			SDL_FillRect(screen_surface, &rect, SDL_MapRGB(screen_surface->format, bg.r, bg.g, bg.b));
 			update_screen();
 			SDL_UpdateWindowSurface(win);
 
@@ -587,10 +607,12 @@ int main(int argc, char *argv[])
 
 	if(joy != NULL)
 	{
+		printf("Closing Joysticks.\n");
 		SDL_JoystickClose(joy);
 	}
 
 die:
+	printf("Gracefully Exiting.\n");
 	TTF_Quit();
 	SDL_DestroyRenderer(sdlRenderer);
 	SDL_DestroyWindow(win);
