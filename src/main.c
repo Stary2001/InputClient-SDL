@@ -23,6 +23,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "input.h"
 #include "menu.h"
@@ -30,6 +31,7 @@
 
 #define JOY_DEADZONE 1700
 #define CPAD_BOUND 0x5d0
+#define CPP_BOUND 0x7f
 
 #define ACCEPTING_INPUT 0
 #define MENU_KEYBOARD 1
@@ -43,7 +45,12 @@ SDL_Renderer *sdlRenderer;
 // \/ input state.
 int16_t circle_x = 0;
 int16_t circle_y = 0;
+int16_t cpp_x = 0;
+int16_t cpp_y = 0;
+
 uint32_t hid_buttons = 0xfffff000;
+uint32_t special_buttons = 0;
+uint32_t zlzr_state = 0;
 
 int8_t touching = 0;
 int16_t touch_x = 0;
@@ -101,7 +108,8 @@ void send_frame()
 	if(sock_fd == -1) return;
 	char v[12];
 	uint32_t hid_state = ~hid_buttons;
-	uint32_t circle_state = 0x800800;
+	uint32_t circle_state = 0x7ff7ff;
+	uint32_t cstick_state = 0x80800081;
 	uint32_t touch_state = 0x2000000;
 
 	if(circle_x != 0 || circle_y != 0) // Do circle magic. 0x5d0 is the upper/lower bound of circle pad input
@@ -111,6 +119,19 @@ void send_frame()
 		x = ((x * CPAD_BOUND) / 32768) + 2048;
 		y = ((y * CPAD_BOUND) / 32768) + 2048;
 		circle_state = x | (y << 12);
+	}
+
+	if(cpp_x != 0 || cpp_y != 0) // Do circle magic. 0x5d0 is the upper/lower bound of circle pad input
+	{
+		double x = cpp_x / 32768.0;
+		double y = cpp_y / 32768.0;
+		double real_x = ((x+y) / M_SQRT2);
+		double real_y = ((y-x) / M_SQRT2);
+
+		uint32_t xx = (uint32_t)(real_x * CPP_BOUND) + 0x80;
+		uint32_t yy = (uint32_t)(real_y * CPP_BOUND) + 0x80;
+
+		cstick_state = (yy&0xff) << 24 | (xx&0xff) << 16 | (zlzr_state&0xff) << 8 | 0x81;
 	}
 
 	if(touching) // This is good enough.
@@ -123,14 +144,39 @@ void send_frame()
 	}
 
 	memcpy(v, &hid_state, 4);
-	memcpy(v + 8, &circle_state, 4);
 	memcpy(v + 4, &touch_state, 4);
+	memcpy(v + 8, &circle_state, 4);
+	memcpy(v + 12, &cstick_state, 4);
+	memcpy(v + 16, &special_buttons, 4);
 
-	int i = sendto(sock_fd, v, 12, 0, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in));
+	int i = sendto(sock_fd, v, 20, 0, (struct sockaddr*)&sock_addr, sizeof(struct sockaddr_in));
 }
 
+uint32_t hid_values[] =
+{
+	BIT(0), ///< A
+	BIT(1), ///< B
+	BIT(2), ///< Select
+	BIT(3), ///< Start
+	BIT(4), ///< D-Pad Right
+	BIT(5), ///< D-Pad Left
+	BIT(6), ///< D-Pad Up
+	BIT(7), ///< D-Pad Down
+	BIT(8), ///< R
+	BIT(9), ///< L
+	BIT(10), ///< X
+	BIT(11), //< Y
+};
+
+uint32_t special_values[] =
+{
+	BIT(0), // HOME
+	BIT(1), // Power
+	BIT(2)  // Power(long)
+};
+
 /**
- * Manipulate CircleY, CircleX and HID Buttons according to supplied input
+ * Manipulate CircleY, CircleX, CppX, CppY and HID Buttons according to supplied input
  */
 void set(uint32_t button, int32_t value)
 {
@@ -156,15 +202,69 @@ void set(uint32_t button, int32_t value)
 			else { circle_x = value; }
 		break;
 
+		case KEY_CSTICK_UP:
+			if(value == 0 || value == 1) { cpp_y = 32767 * value; }
+			else { cpp_y = value; }
+		break;
+
+		case KEY_CSTICK_DOWN:
+			if(value == 0 || value == 1) { cpp_y = -32767 * value; }
+			else { cpp_y = value; }
+		break;
+
+		case KEY_CSTICK_LEFT:
+			if(value == 0 || value == 1) { cpp_x = -32767 * value; }
+			else { cpp_x = value; }
+		break;
+
+		case KEY_CSTICK_RIGHT:
+			if(value == 0 || value == 1) { cpp_x = 32767 * value; }
+			else { cpp_x = value; }
+		break;
+
+		case KEY_ZL:
+		case KEY_ZR:
+		{
+			uint32_t b;
+			if(button == KEY_ZR) b = 0x2;
+			if(button == KEY_ZL) b = 0x4;
+
+			if(value)
+			{
+				zlzr_state |= b;
+			}
+			else
+			{
+				zlzr_state &= ~b;
+			}
+		}
+		break;
+
+		case KEY_HOME:
+		case KEY_POWER:
+		case KEY_POWER_LONG:
+		{
+			button -= KEY_HOME;
+			if(value)
+			{
+				special_buttons |= special_values[button];
+			}
+			else
+			{
+				special_buttons &= ~special_values[button];
+			}
+		}
+		break;
+
 		default:
 		{
 			if(value)
 			{
-				hid_buttons |= button;
+				hid_buttons |= hid_values[button];
 			}
 			else
 			{
-				hid_buttons &= ~button;
+				hid_buttons &= ~hid_values[button];
 			}
 		}
 		break;
@@ -516,7 +616,7 @@ int main(int argc, char *argv[])
 	SDL_Window *win = SDL_CreateWindow("InputRedirectSDL", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, window_w, window_h, 0);
 	screen_surface = SDL_GetWindowSurface(win);
 	TTF_Init();
-	font = TTF_OpenFont(font_path, 16);
+	font = TTF_OpenFont(font_path, 14);
 
 	if(font == NULL)
 	{
