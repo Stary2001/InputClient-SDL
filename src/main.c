@@ -131,7 +131,7 @@ void send_frame()
 		double x = cstick_x / 32768.0;
 		double y = cstick_y / 32768.0;
 
-		// We have rotate the c-stick position 45deg. Thanks, Nintendo.
+		// We have to rotate the c-stick position 45deg. Thanks, Nintendo.
 		uint32_t xx = (uint32_t)((x+y) * M_SQRT1_2 * CPP_BOUND) + 0x80;
 		uint32_t yy = (uint32_t)((y-x) * M_SQRT1_2 * CPP_BOUND) + 0x80;
 
