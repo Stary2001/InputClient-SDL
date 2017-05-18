@@ -60,6 +60,10 @@ int sock_fd = -1;
 struct sockaddr_in sock_addr;
 
 SDL_Surface *screen_surface;
+SDL_Color bg_color = {0, 0, 0, 0};
+int window_w = 640;
+int window_h = 480;
+
 int curr_state = 0;
 int curr_item = 0; // curr menu item.
 int num_items = 1;
@@ -67,8 +71,8 @@ int run = 1; // Run?
 struct settings settings;
 int last_keycode = 0;
 int capture = 0;
-int window_w = 640;
-int window_h = 480;
+
+unsigned int frame_deadline = 0;
 
 const char *settings_filename = "input.conf";
 
@@ -276,7 +280,7 @@ void draw_text(const char *t, SDL_Color c, int x, int y, int *w, int *h)
 	if(strlen(t) == 0) return;
 
 	SDL_Rect rect1, rect2;
-	SDL_Surface* text_surface = TTF_RenderText_Solid(font, t, c);
+	SDL_Surface* text_surface = TTF_RenderText_Shaded(font, t, c, bg_color);
 	rect1.x = 0;
 	rect1.y = 0;
 	rect2.x = x;
@@ -376,10 +380,20 @@ void update_screen()
 	}
 	else if(menus[curr_state].type == NET)
 	{
+		SDL_Color c = curr_item == 0 ? highlight_color : font_color;
+		num_items = 2;
+
+		char buff[64];
+
 		const char *s = settings.ip;
-		if(s == NULL) { s = "None"; }
-		draw_text("IP: ", font_color, 0, h, &w, NULL);
-		draw_text(s, font_color, w, h, NULL, NULL);
+		if(settings.ip_len == 0) { s = "None"; }
+		draw_text("IP: ", c, 0, h, &w, NULL);
+		draw_text(s, c, w, h, NULL, NULL);
+
+		c = curr_item == 1 ? highlight_color : font_color;
+
+		sprintf(buff, "Frame frequency: every %i ms", settings.frame_ms);
+		draw_text(buff, c, 0, h * 2, NULL, NULL);
 	}
 	else if(menus[curr_state].type == INFO)
 	{
@@ -529,6 +543,66 @@ void process_menu(SDL_Event *ev, int curr_menu)
 		{
 			set_binding(curr_menu, curr_item, TYPE_KEY, ev->key.keysym.sym, 0);
 		}
+		else if(capture && curr_menu == 2) // Net.
+		{
+			SDL_Keycode key = ev->key.keysym.sym;
+			if(curr_item == 0) // IP
+			{
+				if(key == SDLK_RETURN)
+				{
+					capture = 0;
+					save_settings(settings_filename, &settings);
+				}
+				else
+				{
+					char *s = settings.ip + settings.ip_len;
+
+					char c = 0;
+					if(key >= SDLK_0 && key <= SDLK_9)
+					{
+						c = '0' + key - SDLK_0;
+					}
+					else if(key == SDLK_PERIOD)
+					{
+						c = '.';
+					}
+
+					if(key == SDLK_BACKSPACE && settings.ip_len != 0)
+					{
+						settings.ip_len--;
+						*(s - 1) = 0;
+					}
+					else if(settings.ip_len != 15)
+					{
+						*s++ = c;
+						*s = 0;
+						settings.ip_len++;
+					}
+				}
+			}
+			else // Frame delay
+			{
+				switch(key)
+				{
+					case SDLK_UP:
+						settings.frame_ms += 5;
+					break;
+					case SDLK_DOWN:
+						settings.frame_ms -= 5;
+					break;
+					case SDLK_LEFT:
+						settings.frame_ms -= 10;
+					break;
+					case SDLK_RIGHT:
+						settings.frame_ms += 10;
+					break;
+					case SDLK_RETURN:
+						capture = 0;
+						save_settings(settings_filename, &settings);
+					break;
+				}
+			}
+		}
 		else
 		{
 			switch(ev->key.keysym.sym)
@@ -543,7 +617,7 @@ void process_menu(SDL_Event *ev, int curr_menu)
 
 				case SDLK_RETURN:
 					capture = 1;
-					settings.bindings[curr_menu][curr_item].type = TYPE_NONE;
+					if(curr_menu == 0 || curr_menu == 1) settings.bindings[curr_menu][curr_item].type = TYPE_NONE;
 				break;
 			}
 		}
@@ -590,12 +664,17 @@ int main(int argc, char *argv[])
 		settings.bindings[0][i].type = TYPE_NONE;
 		settings.bindings[1][i].type = TYPE_NONE;
 	}
+	settings.frame_ms = 50; // Default.
 
 	int settings_fail = load_settings(settings_filename, &settings);
+	if(settings_fail)
+	{
+		save_settings(settings_filename, &settings);
+	}
 
 	printf("Settings IP: %s \n", settings.ip);
 
-	if(settings.ip != NULL && connect_to_3ds(settings.ip))
+	if(settings.ip_len != 0 && connect_to_3ds(settings.ip))
 	{
 		printf("Failed to connect to '%s'!\n", settings.ip);
 		return 1;
@@ -633,8 +712,6 @@ int main(int argc, char *argv[])
 	}
 
 	int dirty = 0;
-	SDL_Color bg = {0, 0, 0, 0};
-
 	SDL_Event ev;
 
 	while(run)
@@ -674,45 +751,50 @@ int main(int argc, char *argv[])
 				break;
 			}
 
-			dirty = 1;
+			if(ev.type != SDL_MOUSEMOTION)
+				dirty = 1;
 
 			switch(curr_state)
 			{
 				case 0:
 					process_input(&ev);
-					break;
+				break;
 
 				case 1:
 				case 2:
+				case 3:
 					process_menu(&ev, curr_state-1);
-					break;
+				break;
 			}
 		}
 
-		if(dirty)
+		unsigned int curr_time = SDL_GetTicks();
+		if(dirty || frame_deadline <= curr_time)
 		{
+			frame_deadline = curr_time + settings.frame_ms;
 			send_frame();
+
 			SDL_Rect rect;
 			rect.x = 0;
 			rect.y = 0;
 			rect.w = window_w;
 			rect.h = window_h;
-			SDL_FillRect(screen_surface, &rect, SDL_MapRGB(screen_surface->format, bg.r, bg.g, bg.b));
+			SDL_FillRect(screen_surface, &rect, SDL_MapRGB(screen_surface->format, bg_color.r, bg_color.g, bg_color.b));
 			update_screen();
 			SDL_UpdateWindowSurface(win);
 
-			dirty = 0;
+			//dirty = 0;
 		}
 	}
 
 	if(joy != NULL)
 	{
-		printf("Closing Joysticks.\n");
+		printf("Closing joysticks.\n");
 		SDL_JoystickClose(joy);
 	}
 
 die:
-	printf("Gracefully Exiting.\n");
+	printf("Gracefully exiting.\n");
 	TTF_Quit();
 	SDL_DestroyRenderer(sdlRenderer);
 	SDL_DestroyWindow(win);

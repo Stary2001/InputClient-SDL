@@ -41,10 +41,12 @@ int save_settings(const char *filename, struct settings *s)
 		}
 	}
 
-	if(s->ip != NULL)
+	if(s->ip_len != 0)
 	{
 		fprintf(f, "ip=%s\n", s->ip);
 	}
+
+	fprintf(f, "frame_ms=%d\n", s->frame_ms);
 
 	fclose(f);
 
@@ -126,9 +128,12 @@ int load_settings(const char *filename, struct settings *s)
 		}
 		else if(strncmp(name, "ip", 2) == 0)
 		{
-			char *str = malloc(strlen(k) + 1);
-			strcpy(str, k);
-			s->ip = str;
+			strncpy(s->ip, k, 15);
+			s->ip_len = strlen(k);
+		}
+		else if(strncmp(name, "frame_ms", 8) == 0)
+		{
+			s->frame_ms = atoi(k);
 		}
 	}
 
