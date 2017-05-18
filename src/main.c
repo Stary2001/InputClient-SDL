@@ -36,7 +36,8 @@
 #define ACCEPTING_INPUT 0
 #define MENU_KEYBOARD 1
 #define MENU_JOYPAD 2
-#define MENU_IP 3
+#define MENU_NET 3
+#define MENU_INFO 4
 
 const char *font_path = "DejaVuSans.ttf";
 TTF_Font *font;
@@ -380,8 +381,8 @@ void update_screen()
 	}
 	else if(menus[curr_state].type == NET)
 	{
-		SDL_Color c = curr_item == 0 ? highlight_color : font_color;
 		num_items = 2;
+		SDL_Color c = curr_item == 0 ? highlight_color : font_color;
 
 		char buff[64];
 
@@ -615,6 +616,16 @@ void process_menu(SDL_Event *ev, int curr_menu)
 					if(curr_item != num_items-1) curr_item++;
 				break;
 
+				case SDLK_LEFT:
+					curr_item -= 5;
+					if(curr_item < 0) curr_item = 0;
+				break;
+
+				case SDLK_RIGHT:
+					curr_item += 5;
+					if(curr_item > num_items-1) curr_item = num_items-1;
+				break;
+
 				case SDLK_RETURN:
 					capture = 1;
 					if(curr_menu == 0 || curr_menu == 1) settings.bindings[curr_menu][curr_item].type = TYPE_NONE;
@@ -705,8 +716,7 @@ int main(int argc, char *argv[])
 
 	if(settings_fail)
 	{
-		printf("Settings failed to load, moving user to IP screen.");
-		curr_state = MENU_IP;
+		curr_state = MENU_INFO;
 		update_screen();
 		SDL_UpdateWindowSurface(win);
 	}
@@ -734,15 +744,18 @@ int main(int argc, char *argv[])
 				}
 				else if(ev.key.keysym.sym == SDLK_F1)
 				{
+					curr_item = 0;
 					curr_state = MENU_KEYBOARD;
 				}
 				else if(ev.key.keysym.sym == SDLK_F2)
 				{
+					curr_item = 0;
 					curr_state = MENU_JOYPAD;
 				}
 				else if(ev.key.keysym.sym == SDLK_F3)
 				{
-					curr_state = MENU_IP;
+					curr_item = 0;
+					curr_state = MENU_NET;
 				}
 			}
 			else if((ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_CLOSE) || ev.type == SDL_QUIT)
