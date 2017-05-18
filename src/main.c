@@ -46,8 +46,8 @@ SDL_Renderer *sdlRenderer;
 // \/ input state.
 int16_t circle_x = 0;
 int16_t circle_y = 0;
-int16_t cpp_x = 0;
-int16_t cpp_y = 0;
+int16_t cstick_x = 0;
+int16_t cstick_y = 0;
 
 uint32_t hid_buttons = 0xfffff000;
 uint32_t special_buttons = 0;
@@ -126,15 +126,14 @@ void send_frame()
 		circle_state = x | (y << 12);
 	}
 
-	if(cpp_x != 0 || cpp_y != 0) // Do circle magic. 0x5d0 is the upper/lower bound of circle pad input
+	if(cstick_x != 0 || cstick_y != 0)
 	{
-		double x = cpp_x / 32768.0;
-		double y = cpp_y / 32768.0;
-		double real_x = ((x+y) / M_SQRT2);
-		double real_y = ((y-x) / M_SQRT2);
+		double x = cstick_x / 32768.0;
+		double y = cstick_y / 32768.0;
 
-		uint32_t xx = (uint32_t)(real_x * CPP_BOUND) + 0x80;
-		uint32_t yy = (uint32_t)(real_y * CPP_BOUND) + 0x80;
+		// We have rotate the c-stick position 45deg. Thanks, Nintendo.
+		uint32_t xx = (uint32_t)((x+y) * M_SQRT1_2 * CPP_BOUND) + 0x80;
+		uint32_t yy = (uint32_t)((y-x) * M_SQRT1_2 * CPP_BOUND) + 0x80;
 
 		cstick_state = (yy&0xff) << 24 | (xx&0xff) << 16 | (zlzr_state&0xff) << 8 | 0x81;
 	}
@@ -208,23 +207,23 @@ void set(uint32_t button, int32_t value)
 		break;
 
 		case KEY_CSTICK_UP:
-			if(value == 0 || value == 1) { cpp_y = 32767 * value; }
-			else { cpp_y = value; }
+			if(value == 0 || value == 1) { cstick_y = 32767 * value; }
+			else { cstick_y = value; }
 		break;
 
 		case KEY_CSTICK_DOWN:
-			if(value == 0 || value == 1) { cpp_y = -32767 * value; }
-			else { cpp_y = value; }
+			if(value == 0 || value == 1) { cstick_y = -32767 * value; }
+			else { cstick_y = value; }
 		break;
 
 		case KEY_CSTICK_LEFT:
-			if(value == 0 || value == 1) { cpp_x = -32767 * value; }
-			else { cpp_x = value; }
+			if(value == 0 || value == 1) { cstick_x = -32767 * value; }
+			else { cstick_x = value; }
 		break;
 
 		case KEY_CSTICK_RIGHT:
-			if(value == 0 || value == 1) { cpp_x = 32767 * value; }
-			else { cpp_x = value; }
+			if(value == 0 || value == 1) { cstick_x = 32767 * value; }
+			else { cstick_x = value; }
 		break;
 
 		case KEY_ZL:
