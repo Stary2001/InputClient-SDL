@@ -126,7 +126,7 @@ void send_frame()
 		circle_state = x | (y << 12);
 	}
 
-	if(cstick_x != 0 || cstick_y != 0)
+	if(cstick_x != 0 || cstick_y != 0 || zlzr_state != 0)
 	{
 		double x = cstick_x / 32768.0;
 		double y = cstick_y / 32768.0;
@@ -795,7 +795,7 @@ int main(int argc, char *argv[])
 			update_screen();
 			SDL_UpdateWindowSurface(win);
 
-			//dirty = 0;
+			dirty = 0;
 		}
 	}
 
