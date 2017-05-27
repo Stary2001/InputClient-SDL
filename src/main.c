@@ -111,7 +111,7 @@ int connect_to_3ds(const char *addr)
 void send_frame()
 {
 	if(sock_fd == -1) return;
-	char v[12];
+	char v[20];
 	uint32_t hid_state = ~hid_buttons;
 	uint32_t circle_state = 0x7ff7ff;
 	uint32_t cstick_state = 0x80800081;
@@ -368,10 +368,6 @@ void update_screen()
 					break;
 				}
 
-				if(prefix != NULL && p != NULL)
-				{
-					sprintf(buff, "%s %s%i", prefix, prefix_2, *p);
-				}
 				button_text = buff;
 			}
 
